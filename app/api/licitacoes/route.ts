@@ -3,33 +3,33 @@ import { buscarLicitacoes } from "@/lib/pncp";
 
 export const runtime = "nodejs";
 
-function ymd(value:string|null, fallback:Date){
-  if(!value) return fallback.toISOString().slice(0,10).replace(/-/g,"");
-  const clean=value.replace(/\D/g,"");
-  return /^\d{8}$/.test(clean)?clean:fallback.toISOString().slice(0,10).replace(/-/g,"");
+function parseDate(value:string|null,fallback:Date){
+  if(!value)return fallback;
+  const d=new Date(value+"T12:00:00");
+  return Number.isNaN(d.getTime())?fallback:d;
 }
+function ymd(date:Date){return date.toISOString().slice(0,10).replace(/-/g,"")}
 
 export async function GET(request:NextRequest){
   const q=request.nextUrl.searchParams;
-  const end=new Date();
-  const start=new Date();
-  start.setDate(end.getDate()-2);
-  const modalidade=Number(q.get("modalidade"))||null;
-  const dataInicial=ymd(q.get("inicio"),start);
-  const dataFinal=ymd(q.get("fim"),end);
+  const end=parseDate(q.get("fim"),new Date());
+  const fallbackStart=new Date(end); fallbackStart.setDate(fallbackStart.getDate()-6);
+  const start=parseDate(q.get("inicio"),fallbackStart);
 
-  if(Number(dataFinal)-Number(dataInicial)>10000){
-    return NextResponse.json({error:"Use períodos menores para obter resultados mais precisos."},{status:400});
-  }
+  if(start>end)return NextResponse.json({error:"A data inicial não pode ser posterior à data final."},{status:400});
+  if(end.getTime()-start.getTime()>366*86400000)return NextResponse.json({error:"Consulte no máximo 366 dias por busca."},{status:400});
+
+  const modalidade=Number(q.get("modalidade"))||null;
+  const uf=(q.get("uf")||"").toUpperCase().replace(/[^A-Z]/g,"").slice(0,2);
 
   try{
     const result=await buscarLicitacoes({
-      dataInicial,
-      dataFinal,
+      dataInicial:ymd(start),
+      dataFinal:ymd(end),
       modalidade,
-      uf:(q.get("uf")||"").toUpperCase().slice(0,2) || undefined,
+      uf:uf||undefined,
       keyword:q.get("q")||undefined,
-      paginas:Number(q.get("paginas"))||1
+      paginas:Math.max(1,Math.min(Number(q.get("paginas"))||1,3))
     });
     return NextResponse.json(result,{headers:{"Cache-Control":"public, s-maxage=300, stale-while-revalidate=900"}});
   }catch(error){
