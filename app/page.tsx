@@ -91,7 +91,7 @@ export default function Home(){
  function removeKeyword(k:string){
   const next=keywords.filter(x=>x!==k);setKeywords(next);localStorage.setItem("licitacoes:keywords",JSON.stringify(next));
  }
- function exportCsv(list=Licitacao[]){
+ function exportCsv(list:Licitacao[]=items){
   const rows=[["Órgão","Objeto","Modalidade","UF","Município","Valor","Publicação","Encerramento","PNCP"],...list.map(x=>[x.orgaoRazaoSocial,x.objetoCompra,x.modalidadeNome,x.ufSigla,x.municipioNome,String(x.valorTotalEstimado??""),x.dataPublicacaoPncp,x.dataEncerramentoProposta,x.urlPncp])];
   const csv=rows.map(r=>r.map(v=>'"'+String(v).replaceAll('"','""')+'"').join(";")).join("\n");
   const a=document.createElement("a");a.href=URL.createObjectURL(new Blob(["\ufeff"+csv],{type:"text/csv;charset=utf-8"}));a.download="licitacoes-brasil.csv";a.click();URL.revokeObjectURL(a.href);
