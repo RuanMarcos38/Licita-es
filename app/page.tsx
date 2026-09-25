@@ -2,13 +2,13 @@
 import {FormEvent,useEffect,useMemo,useState} from "react";
 
 type Licitacao={
- id:string;numeroControlePNCP:string;numeroCompra:string;numeroProcesso:string;objetoCompra:string;
- informacaoComplementar?:string;modalidadeNome:string;situacaoCompraNome:string;valorTotalEstimado:number|null;
- dataPublicacaoPncp:string;dataAberturaProposta:string;dataEncerramentoProposta:string;orgaoRazaoSocial:string;
- orgaoCnpj:string;municipioNome:string;ufSigla:string;anoCompra:number|null;sequencialCompra:number|null;
- urlPncp:string;urlOrigem:string;
+  id:string;numeroControlePNCP:string;numeroCompra:string;numeroProcesso:string;objetoCompra:string;
+  informacaoComplementar?:string;modalidadeNome:string;situacaoCompraNome:string;valorTotalEstimado:number|null;
+  dataPublicacaoPncp:string;dataAberturaProposta:string;dataEncerramentoProposta:string;orgaoRazaoSocial:string;
+  orgaoCnpj:string;municipioNome:string;ufSigla:string;anoCompra:number|null;sequencialCompra:number|null;
+  urlPncp:string;urlOrigem:string;
 };
-type Detail={contratacao:any;itens:any[];documentos:any[];historico:any[];consultadoEm:string};
+type Detail={contratacao:any;itens:any[];documentos:any[];historico:any[];consultadoEm:string;parcial?:boolean};
 type Tab="dashboard"|"licitacoes"|"favoritos"|"monitoramento"|"fontes"|"configuracoes";
 
 const UFS=["","AC","AL","AP","AM","BA","CE","DF","ES","GO","MA","MT","MS","MG","PA","PB","PR","PE","PI","RJ","RN","RS","RO","RR","SC","SP","SE","TO"];
@@ -27,11 +27,10 @@ const shortMoney=(v:number)=>{
 const date=(v:string)=>v?new Intl.DateTimeFormat("pt-BR",{dateStyle:"short"}).format(new Date(v)):"—";
 const daysLeft=(v:string)=>{
  if(!v)return null;
- const d=Math.ceil((new Date(v).getTime()-Date.now())/86400000);
- return d;
+ return Math.ceil((new Date(v).getTime()-Date.now())/86400000);
 };
 
-function Icon({name}:{name:string}){return <span className="navIcon" aria-hidden>{name}</span>}
+function I({children}:{children:React.ReactNode}){return <span className="ico">{children}</span>}
 
 export default function Home(){
  const today=new Date().toISOString().slice(0,10);
@@ -54,14 +53,15 @@ export default function Home(){
  const [mobileMenu,setMobileMenu]=useState(false);
 
  useEffect(()=>{
-   try{
-    setFav(JSON.parse(localStorage.getItem("licitacoes:favoritos")||"[]"));
-    setKeywords(JSON.parse(localStorage.getItem("licitacoes:keywords")||"[]"));
-   }catch{}
+  try{
+   setFav(JSON.parse(localStorage.getItem("licitacoes:favoritos")||"[]"));
+   setKeywords(JSON.parse(localStorage.getItem("licitacoes:keywords")||"[]"));
+  }catch{}
  },[]);
 
  async function search(e?:FormEvent,goToList=true){
-  e?.preventDefault(); setLoading(true); setError("");
+  e?.preventDefault();
+  setLoading(true);setError("");
   const p=new URLSearchParams({inicio,fim,paginas:"1"});
   if(query.trim())p.set("q",query.trim());
   if(uf)p.set("uf",uf);
@@ -69,7 +69,7 @@ export default function Home(){
   try{
    const r=await fetch("/api/licitacoes?"+p.toString(),{cache:"no-store"});
    const j=await r.json();
-   if(!r.ok)throw new Error(j.error||"Falha na consulta");
+   if(!r.ok)throw new Error(j.detail||j.error||"Falha na consulta");
    setItems(j.items||[]);
    if(goToList)setTab("licitacoes");
   }catch(err){setError(err instanceof Error?err.message:"Erro ao consultar");}
@@ -81,7 +81,7 @@ export default function Home(){
  function changeTab(next:Tab){setTab(next);setMobileMenu(false)}
  function toggleFav(id:string){
   const next=fav.includes(id)?fav.filter(x=>x!==id):[...fav,id];
-  setFav(next); localStorage.setItem("licitacoes:favoritos",JSON.stringify(next));
+  setFav(next);localStorage.setItem("licitacoes:favoritos",JSON.stringify(next));
  }
  function addKeyword(){
   const k=newKeyword.trim();
@@ -115,156 +115,179 @@ export default function Home(){
  }),[items,keywords]);
  const totalValue=useMemo(()=>items.reduce((s,x)=>s+(x.valorTotalEstimado||0),0),[items]);
  const endingSoon=useMemo(()=>items.filter(x=>{const d=daysLeft(x.dataEncerramentoProposta);return d!==null&&d>=0&&d<=3}).length,[items]);
- const recent=items.slice(0,6);
+ const recent=items.slice(0,7);
  const byUf=useMemo(()=>{
-   const map=new Map<string,number>();
-   items.forEach(x=>{const k=x.ufSigla||"N/I";map.set(k,(map.get(k)||0)+1)});
-   return [...map.entries()].sort((a,b)=>b[1]-a[1]).slice(0,8);
+  const map=new Map<string,number>();
+  items.forEach(x=>{const k=x.ufSigla||"N/I";map.set(k,(map.get(k)||0)+1)});
+  return [...map.entries()].sort((a,b)=>b[1]-a[1]).slice(0,7);
  },[items]);
  const maxUf=Math.max(1,...byUf.map(([,v])=>v));
-
+ const linePoints=byUf.length?byUf.map(([,v],i)=>`${i*(560/Math.max(1,byUf.length-1))},${170-(v/maxUf)*125}`).join(" "):"0,150 90,120 180,138 270,90 360,108 450,65 560,86";
  const title=tab==="dashboard"?"Dashboard":tab==="licitacoes"?"Buscar licitações":tab==="favoritos"?"Favoritos":tab==="monitoramento"?"Monitoramento inteligente":tab==="fontes"?"Fontes oficiais":"Configurações";
 
- return <div className="shell">
+ return <div className="appFrame">
   <aside className={"sidebar "+(mobileMenu?"open":"")}>
-   <div className="brand"><span className="brandMark">L</span><span><b>Licita Brasil</b><small>Compras públicas</small></span></div>
-   <button className="collapseBtn" onClick={()=>setMobileMenu(false)}>‹</button>
+   <div className="brandRow">
+    <div className="brandLogo">◇</div><strong>Licita Brasil</strong>
+    <button className="sideCollapse" onClick={()=>setMobileMenu(false)}>↤</button>
+   </div>
+   <div className="sideSearch"><span>⌕</span><input placeholder="Pesquisar"/><kbd>⌘ F</kbd></div>
 
-   <div className="menuLabel">MENU PRINCIPAL</div>
+   <div className="sideLabel">Menu principal</div>
    <nav>
-    <button className={tab==="dashboard"?"active":""} onClick={()=>changeTab("dashboard")}><Icon name="⌂"/>Dashboard</button>
-    <button className={tab==="licitacoes"?"active":""} onClick={()=>changeTab("licitacoes")}><Icon name="⌕"/>Buscar licitações</button>
-    <button className={tab==="favoritos"?"active":""} onClick={()=>changeTab("favoritos")}><Icon name="☆"/>Favoritos <em>{fav.length}</em></button>
+    <button className={tab==="dashboard"?"active":""} onClick={()=>changeTab("dashboard")}><I>⌂</I>Dashboard</button>
+    <button className={tab==="licitacoes"?"active":""} onClick={()=>changeTab("licitacoes")}><I>▤</I>Licitações</button>
+    <button className={tab==="favoritos"?"active":""} onClick={()=>changeTab("favoritos")}><I>☆</I>Favoritos <em>{fav.length}</em></button>
+    <button className={tab==="monitoramento"?"active":""} onClick={()=>changeTab("monitoramento")}><I>◎</I>Monitoramento <em>{keywords.length}</em></button>
+    <button onClick={()=>changeTab("fontes")} className={tab==="fontes"?"active":""}><I>✓</I>Fontes oficiais</button>
    </nav>
 
-   <div className="menuLabel">INTELIGÊNCIA</div>
+   <div className="sideLabel">Outros</div>
    <nav>
-    <button className={tab==="monitoramento"?"active":""} onClick={()=>changeTab("monitoramento")}><Icon name="◎"/>Monitoramento <em>{keywords.length}</em></button>
-    <button className={tab==="fontes"?"active":""} onClick={()=>changeTab("fontes")}><Icon name="✓"/>Fontes oficiais</button>
+    <a href="https://pncp.gov.br" target="_blank"><I>✉</I>PNCP</a>
+    <a href="https://www.gov.br/compras" target="_blank"><I>⌁</I>Compras.gov.br</a>
+    <button onClick={()=>changeTab("configuracoes")} className={tab==="configuracoes"?"active":""}><I>⌘</I>Configurações</button>
    </nav>
 
-   <div className="menuLabel">GERAL</div>
-   <nav>
-    <button className={tab==="configuracoes"?"active":""} onClick={()=>changeTab("configuracoes")}><Icon name="⚙"/>Configurações</button>
-    <a href="https://pncp.gov.br/app/editais" target="_blank"><Icon name="?"/>Central PNCP</a>
-   </nav>
-
-   <div className="sidePromo">
-    <span className="promoIcon">◆</span><b>Dados oficiais</b>
-    <p>Consulta integrada ao Portal Nacional de Contratações Públicas.</p>
-    <a href="https://pncp.gov.br" target="_blank">Acessar PNCP ↗</a>
+   <div className="sideBottom">
+    <div className="sideLabel">Conta</div>
+    <button><I>?</I>Central de ajuda</button>
+    <button onClick={()=>changeTab("configuracoes")}><I>⚙</I>Ajustes</button>
+    <div className="userCard"><span>LB</span><div><b>Licita Brasil</b><small>Administrador</small></div><i>↪</i></div>
    </div>
   </aside>
 
-  <main className="workspace">
-   <div className="topbar">
-    <button className="menuBtn" onClick={()=>setMobileMenu(!mobileMenu)}>☰</button>
-    <form className="globalSearch" onSubmit={e=>search(e,true)}>
-      <span>⌕</span><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Pesquisar licitações, órgãos ou produtos"/>
-      <kbd>↵</kbd>
-    </form>
-    <div className="topActions">
-      <button title="Ajuda">?</button><button title="Notificações">♢</button>
-      <div className="profile"><span>LB</span><div><b>Licita Brasil</b><small>Administrador</small></div></div>
+  <main className="main">
+   <header className="topbar">
+    <button className="mobileBtn" onClick={()=>setMobileMenu(!mobileMenu)}>☰</button>
+    <div className="heading"><h1>{title}</h1><p>Dados oficiais do PNCP para decisões comerciais mais rápidas.</p></div>
+    <div className="topbarActions">
+      <div className="avatars"><span>LB</span><span>PN</span><span>BR</span><button>+</button></div>
+      <button className="iconBtn">ⓘ</button><button className="iconBtn">♧</button>
+      <button className="exportBtn" onClick={()=>exportCsv(tab==="favoritos"?favorites:items)}>Exportar ⤓</button>
     </div>
-   </div>
+   </header>
 
-   <section className="content">
-    <div className="pageHead">
-      <div><h1>{title}</h1><p>{tab==="dashboard"?"Monitore oportunidades públicas e encontre novos negócios em todo o Brasil.":"Dados oficiais do PNCP organizados para acelerar sua análise comercial."}</p></div>
-      <div className="headActions"><span className="datePill">▣ {new Intl.DateTimeFormat("pt-BR",{dateStyle:"medium"}).format(new Date())}</span><button className="darkBtn" onClick={()=>exportCsv(tab==="favoritos"?favorites:items)}>⇩ Exportar</button></div>
-    </div>
-
-    {error&&<div className="error">{error}</div>}
+   <div className="workspace">
+    {error&&<div className="errorBox">{error}</div>}
 
     {tab==="dashboard"&&<>
-      <section className="metrics">
-       <article><div className="metricTop"><span className="metricIcon">▣</span><b>Oportunidades encontradas</b><button>•••</button></div><strong>{items.length}</strong><p><span className="up">PNCP</span> consulta dos últimos 7 dias</p></article>
-       <article><div className="metricTop"><span className="metricIcon">R$</span><b>Valor potencial</b><button>•••</button></div><strong>{shortMoney(totalValue)}</strong><p><span className="up">Estimado</span> nos processos listados</p></article>
-       <article><div className="metricTop"><span className="metricIcon">★</span><b>Favoritas</b><button>•••</button></div><strong>{fav.length}</strong><p><span className="up">{matched.length} matches</span> com seus interesses</p></article>
+      <section className="metricGrid">
+       <article className="metricCard"><div><small>OPORTUNIDADES</small><strong>{items.length}</strong><span className="trend up">↗ PNCP</span></div><div className="metricIcon">◔</div><footer><b>+{items.length}</b><span>últimos 7 dias</span><i>→</i></footer></article>
+       <article className="metricCard"><div><small>VALOR POTENCIAL</small><strong>{shortMoney(totalValue)}</strong><span className="trend up">↗ estimado</span></div><div className="metricIcon">⌁</div><footer><b>{shortMoney(totalValue)}</b><span>volume consultado</span><i>→</i></footer></article>
+       <article className="metricCard"><div><small>FAVORITAS</small><strong>{fav.length}</strong><span className="trend down">◎ {matched.length} matches</span></div><div className="metricIcon">☆</div><footer><b>{favorites.length}</b><span>nesta consulta</span><i>→</i></footer></article>
+       <article className="metricCard"><div><small>ENCERRAM EM BREVE</small><strong>{endingSoon}</strong><span className="trend warn">◷ até 3 dias</span></div><div className="metricIcon">⌁</div><footer><b>{endingSoon}</b><span>exigem atenção</span><i>→</i></footer></article>
       </section>
 
-      <section className="dashboardGrid">
-       <article className="panel overview">
-        <div className="panelTitle"><div><span className="miniIcon">☷</span><b>Visão geral por estado</b></div><span className="legendDot">● oportunidades</span></div>
-        <div className="chart">
-         {byUf.length?byUf.map(([label,value])=><div className="barCol" key={label}><div className="barValue">{value}</div><div className="bar" style={{height:Math.max(18,(value/maxUf)*150)}}></div><span>{label}</span></div>):<div className="chartEmpty">Carregando dados oficiais...</div>}
+      <section className="dashboardBody">
+       <article className="panel chartPanel">
+        <div className="panelHead">
+         <div><small>VISÃO GERAL</small><h2>Oportunidades por estado</h2></div><span className="softBadge">Fonte PNCP</span>
+        </div>
+        <div className="chartToolbar">
+         <button>Dashboard⌄</button><button>Todos os estados⌄</button>
+         <div className="legend"><span className="greenDot"></span>Este período <span className="grayDot"></span>Referência</div>
+        </div>
+        <div className="lineChart">
+         <div className="axisY"><span>{maxUf}</span><span>{Math.round(maxUf*.66)}</span><span>{Math.round(maxUf*.33)}</span><span>0</span></div>
+         <svg viewBox="0 0 560 190" preserveAspectRatio="none">
+          <defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#39d19a" stopOpacity=".25"/><stop offset="100%" stopColor="#39d19a" stopOpacity="0"/></linearGradient></defs>
+          <polyline points={linePoints} fill="none" stroke="#22c98b" strokeWidth="3"/>
+          <polyline points="0,130 95,145 190,125 285,138 380,118 470,126 560,140" fill="none" stroke="#6cb9a5" strokeWidth="2"/>
+          <polygon points={"0,190 "+linePoints+" 560,190"} fill="url(#g)"/>
+         </svg>
+         <div className="axisX">{byUf.length?byUf.map(([u])=><span key={u}>{u}</span>):["SP","SC","PR","RS","MG","RJ","BA"].map(u=><span key={u}>{u}</span>)}</div>
         </div>
        </article>
-       <article className="panel quick">
-        <div className="panelTitle"><b>Resumo rápido</b><button>•••</button></div>
-        <div className="quickItem"><span className="qIcon">◷</span><div><b>{endingSoon}</b><small>encerram em até 3 dias</small></div></div>
-        <div className="quickItem"><span className="qIcon">◎</span><div><b>{matched.length}</b><small>compatíveis com monitoramento</small></div></div>
-        <div className="quickItem"><span className="qIcon">☆</span><div><b>{favorites.length}</b><small>favoritas nesta consulta</small></div></div>
-        <button className="greenBtn full" onClick={()=>changeTab("licitacoes")}>Ver todas as oportunidades</button>
+
+       <article className="panel conversionPanel">
+        <div className="panelHead"><div><small>CONVERSÃO</small><h2>{items.length?Math.min(99,(fav.length/Math.max(items.length,1))*100).toFixed(2):"0.00"}%</h2></div><div className="metricIcon">▥</div></div>
+        <div className="funnelRow"><div><b>Oportunidades</b><small>100%</small></div><strong>{items.length}</strong></div>
+        <div className="funnelRow"><div><b>Monitoradas</b><small>{items.length?Math.round(matched.length/items.length*100):0}%</small></div><strong>{matched.length}</strong></div>
+        <div className="funnelRow"><div><b>Favoritas</b><small>{items.length?Math.round(favorites.length/items.length*100):0}%</small></div><strong>{favorites.length}</strong></div>
+        <div className="funnelRow"><div><b>Encerramento próximo</b><small>{items.length?Math.round(endingSoon/items.length*100):0}%</small></div><strong>{endingSoon}</strong></div>
        </article>
       </section>
 
-      <section className="panel recentPanel">
-       <div className="panelTitle"><div><span className="miniIcon">↗</span><b>Licitações recentes</b></div><button className="textBtn" onClick={()=>changeTab("licitacoes")}>Ver todas</button></div>
-       <div className="tableWrap"><table><thead><tr><th>Oportunidade</th><th>Órgão</th><th>Local</th><th>Valor estimado</th><th>Prazo</th><th>Status</th><th></th></tr></thead>
-       <tbody>{recent.map(x=>{const d=daysLeft(x.dataEncerramentoProposta);return <tr key={x.id}><td><b>{x.objetoCompra}</b><small>{x.modalidadeNome}</small></td><td>{x.orgaoRazaoSocial}</td><td>{x.municipioNome||"—"} / {x.ufSigla||"—"}</td><td><b>{money(x.valorTotalEstimado)}</b></td><td>{d===null?"—":d<0?"Encerrada":d===0?"Hoje":d+" dias"}</td><td><span className="status live">Publicada</span></td><td><button className="dots" onClick={()=>openDetail(x)}>•••</button></td></tr>})}</tbody></table></div>
+      <section className="bottomGrid">
+       <article className="panel monitorCard">
+        <div className="panelHead"><div><small>MONITORAMENTO</small><h2>Inteligência comercial</h2></div><button className="smallBtn" onClick={()=>changeTab("monitoramento")}>Configurar</button></div>
+        <p>Cadastre termos dos seus produtos e serviços para destacar oportunidades compatíveis automaticamente.</p>
+        <div className="monitorStats"><div><span>Matches</span><b>{matched.length}</b></div><div><span>Termos</span><b>{keywords.length}</b></div></div>
+       </article>
+
+       <article className="panel tablePanel">
+        <div className="panelHead"><div><small>LISTA DE OPORTUNIDADES</small><h2>{items.length}</h2></div><button className="refreshBtn" onClick={()=>search(undefined,false)}>↻ Atualizar</button></div>
+        <div className="miniSearch"><span>⌕</span><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Pesquisar"/><button onClick={()=>search(undefined,true)}>Buscar</button></div>
+        <div className="tableWrap"><table><thead><tr><th>Oportunidade</th><th>Órgão</th><th>UF</th><th>Valor</th><th>Prazo</th><th></th></tr></thead>
+         <tbody>{recent.map(x=><tr key={x.id}><td><b>{x.objetoCompra}</b><small>{x.modalidadeNome}</small></td><td>{x.orgaoRazaoSocial}</td><td>{x.ufSigla||"—"}</td><td>{money(x.valorTotalEstimado)}</td><td>{date(x.dataEncerramentoProposta)}</td><td><button className="rowAction" onClick={()=>openDetail(x)}>•••</button></td></tr>)}</tbody>
+        </table></div>
+       </article>
       </section>
     </>}
 
     {(tab==="licitacoes"||tab==="favoritos")&&<>
-      <form className="searchPanel" onSubmit={e=>search(e,true)}>
-       <div className="searchLine"><span>⌕</span><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Ex.: material gráfico, software, uniformes, alimentos..."/><button className="greenBtn" disabled={loading}>{loading?"Consultando...":"Buscar"}</button></div>
-       <div className="filters">
-        <label>UF<select value={uf} onChange={e=>setUf(e.target.value)}>{UFS.map(x=><option key={x} value={x}>{x||"Todo Brasil"}</option>)}</select></label>
-        <label>Modalidade<select value={modalidade} onChange={e=>setModalidade(e.target.value)}>{MODS.map(([v,n])=><option key={v} value={v}>{n}</option>)}</select></label>
-        <label>Publicação inicial<input type="date" value={inicio} onChange={e=>setInicio(e.target.value)}/></label>
-        <label>Publicação final<input type="date" value={fim} onChange={e=>setFim(e.target.value)}/></label>
-       </div>
-      </form>
-      <div className="listHeader"><div><b>{(tab==="favoritos"?favorites:items).length} oportunidades</b><span> • fonte oficial PNCP</span></div><button onClick={()=>exportCsv(tab==="favoritos"?favorites:items)}>⇩ Exportar CSV</button></div>
-      <div className="cards">
-       {(tab==="favoritos"?favorites:items).map(x=><article className="tenderCard" key={x.id}>
-        <div className="cardTop"><span className="badge">{x.modalidadeNome}</span><button className={"star "+(fav.includes(x.id)?"saved":"")} onClick={()=>toggleFav(x.id)}>★</button></div>
-        <h2>{x.objetoCompra}</h2><p className="org">{x.orgaoRazaoSocial}</p>
-        <div className="meta"><span>⌖ {x.municipioNome||"Não informado"}{x.ufSigla?" / "+x.ufSigla:""}</span><span>▣ {x.numeroCompra||x.numeroProcesso||"Sem número"}</span></div>
-        <div className="details"><div><small>Valor estimado</small><b>{money(x.valorTotalEstimado)}</b></div><div><small>Publicação</small><b>{date(x.dataPublicacaoPncp)}</b></div><div><small>Encerramento</small><b>{date(x.dataEncerramentoProposta)}</b></div></div>
-        <div className="cardActions"><button className="darkBtn" onClick={()=>openDetail(x)}>Ver detalhes</button><a href={x.urlPncp} target="_blank">Abrir PNCP ↗</a></div>
-       </article>)}
-       {!loading&&!(tab==="favoritos"?favorites:items).length&&<div className="empty">Nenhuma oportunidade encontrada nesta visualização.</div>}
+     <form className="searchPanel panel" onSubmit={e=>search(e,true)}>
+      <div className="panelHead"><div><small>BUSCA OFICIAL</small><h2>Encontre licitações no PNCP</h2></div><span className="softBadge">{tab==="favoritos"?"Favoritos":"Todo Brasil"}</span></div>
+      <div className="bigSearch"><span>⌕</span><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Ex.: software, brindes, uniformes, marketing..."/><button disabled={loading}>{loading?"Consultando...":"Buscar"}</button></div>
+      <div className="filters">
+       <label>UF<select value={uf} onChange={e=>setUf(e.target.value)}>{UFS.map(x=><option key={x} value={x}>{x||"Todo Brasil"}</option>)}</select></label>
+       <label>Modalidade<select value={modalidade} onChange={e=>setModalidade(e.target.value)}>{MODS.map(([v,n])=><option key={v} value={v}>{n}</option>)}</select></label>
+       <label>Publicação inicial<input type="date" value={inicio} onChange={e=>setInicio(e.target.value)}/></label>
+       <label>Publicação final<input type="date" value={fim} onChange={e=>setFim(e.target.value)}/></label>
       </div>
+     </form>
+     <div className="listHeader"><b>{(tab==="favoritos"?favorites:items).length} oportunidades</b><button onClick={()=>exportCsv(tab==="favoritos"?favorites:items)}>Exportar CSV</button></div>
+     <div className="opportunityGrid">
+      {(tab==="favoritos"?favorites:items).map(x=><article className="oppCard" key={x.id}>
+       <div className="oppTop"><span>{x.modalidadeNome}</span><button className={fav.includes(x.id)?"saved":""} onClick={()=>toggleFav(x.id)}>★</button></div>
+       <h3>{x.objetoCompra}</h3><p>{x.orgaoRazaoSocial}</p>
+       <div className="oppMeta"><span>⌖ {x.municipioNome||"—"} / {x.ufSigla||"—"}</span><span>▣ {x.numeroCompra||x.numeroProcesso||"Sem número"}</span></div>
+       <div className="oppStats"><div><small>Valor</small><b>{money(x.valorTotalEstimado)}</b></div><div><small>Encerramento</small><b>{date(x.dataEncerramentoProposta)}</b></div></div>
+       <div className="oppActions"><button onClick={()=>openDetail(x)}>Ver detalhes</button><a href={x.urlPncp} target="_blank">PNCP ↗</a></div>
+      </article>)}
+      {!loading&&!(tab==="favoritos"?favorites:items).length&&<div className="empty">Nenhuma oportunidade encontrada.</div>}
+     </div>
     </>}
 
-    {tab==="monitoramento"&&<section className="settingsGrid">
-      <article className="panel"><div className="panelTitle"><b>Palavras-chave monitoradas</b><span className="status live">Ativo</span></div><p className="muted">Cadastre os produtos e serviços da empresa. O sistema compara os termos com as oportunidades obtidas do PNCP.</p>
-       <div className="keywordForm"><input value={newKeyword} onChange={e=>setNewKeyword(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();addKeyword()}}} placeholder="Ex.: copos personalizados"/><button className="greenBtn" onClick={addKeyword}>Adicionar</button></div>
-       <div className="chips">{keywords.map(k=><span key={k}>{k}<button onClick={()=>removeKeyword(k)}>×</button></span>)}{!keywords.length&&<small className="muted">Nenhuma palavra monitorada ainda.</small>}</div>
-      </article>
-      <article className="panel matchPanel"><span className="metricIcon">◎</span><strong>{matched.length}</strong><h3>oportunidades compatíveis</h3><p>na consulta atual</p><button className="greenBtn full" onClick={()=>changeTab("licitacoes")}>Analisar oportunidades</button></article>
+    {tab==="monitoramento"&&<section className="twoCol">
+     <article className="panel"><div className="panelHead"><div><small>INTELIGÊNCIA</small><h2>Palavras-chave monitoradas</h2></div><span className="softBadge">Ativo</span></div>
+      <p className="muted">Cadastre seus produtos e serviços. O sistema compara os termos com as oportunidades consultadas.</p>
+      <div className="keywordForm"><input value={newKeyword} onChange={e=>setNewKeyword(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();addKeyword()}}} placeholder="Ex.: copos personalizados"/><button onClick={addKeyword}>Adicionar</button></div>
+      <div className="chips">{keywords.map(k=><span key={k}>{k}<button onClick={()=>removeKeyword(k)}>×</button></span>)}{!keywords.length&&<small>Nenhum termo cadastrado.</small>}</div>
+     </article>
+     <article className="panel centerCard"><span className="bigRound">◎</span><strong>{matched.length}</strong><h3>oportunidades compatíveis</h3><p>na consulta atual</p><button onClick={()=>changeTab("licitacoes")}>Analisar oportunidades</button></article>
     </section>}
 
     {tab==="fontes"&&<section className="sourceGrid">
-      <article className="panel sourceCard"><span className="sourceLogo">P</span><span className="status live">OFICIAL</span><h2>PNCP</h2><p>Portal Nacional de Contratações Públicas. É a fonte de dados utilizada pelo buscador e pelos detalhes de itens, documentos e histórico.</p><a href="https://pncp.gov.br" target="_blank">Acessar portal ↗</a></article>
-      <article className="panel sourceCard"><span className="sourceLogo">C</span><span className="status live">OFICIAL</span><h2>Compras.gov.br</h2><p>Portal de compras do Governo Federal. Mantido como fonte complementar e caminho de expansão do sistema.</p><a href="https://www.gov.br/compras" target="_blank">Acessar portal ↗</a></article>
-      <article className="panel sourceCard"><span className="sourceLogo">✓</span><span className="status live">SEGURANÇA</span><h2>Validação oficial</h2><p>Antes de participar, confira prazos, anexos, retificações e regras diretamente no documento oficial.</p></article>
+     <article className="panel source"><span>P</span><b>PNCP</b><p>Portal Nacional de Contratações Públicas. Fonte principal de dados da ferramenta.</p><a href="https://pncp.gov.br" target="_blank">Acessar ↗</a></article>
+     <article className="panel source"><span>C</span><b>Compras.gov.br</b><p>Portal de compras do Governo Federal, mantido como fonte complementar.</p><a href="https://www.gov.br/compras" target="_blank">Acessar ↗</a></article>
+     <article className="panel source"><span>✓</span><b>Validação oficial</b><p>Sempre confira edital, anexos, retificações e prazos na fonte oficial.</p></article>
     </section>}
 
-    {tab==="configuracoes"&&<section className="settingsGrid">
-      <article className="panel"><h2>Preferências de busca</h2><p className="muted">Configure os filtros padrão usados no painel.</p><div className="formStack"><label>Estado padrão<select value={uf} onChange={e=>setUf(e.target.value)}>{UFS.map(x=><option key={x} value={x}>{x||"Todo Brasil"}</option>)}</select></label><label>Modalidade padrão<select value={modalidade} onChange={e=>setModalidade(e.target.value)}>{MODS.map(([v,n])=><option key={v} value={v}>{n}</option>)}</select></label></div></article>
-      <article className="panel"><h2>Status do backend</h2><div className="health"><span></span><div><b>API operacional</b><small>Integração PNCP via backend Next.js</small></div></div><p className="muted">As consultas ao PNCP são executadas no servidor e entregues ao frontend já normalizadas.</p></article>
+    {tab==="configuracoes"&&<section className="twoCol">
+     <article className="panel"><div className="panelHead"><div><small>PREFERÊNCIAS</small><h2>Busca padrão</h2></div></div>
+      <div className="settingsForm"><label>Estado<select value={uf} onChange={e=>setUf(e.target.value)}>{UFS.map(x=><option key={x} value={x}>{x||"Todo Brasil"}</option>)}</select></label><label>Modalidade<select value={modalidade} onChange={e=>setModalidade(e.target.value)}>{MODS.map(([v,n])=><option key={v} value={v}>{n}</option>)}</select></label></div>
+     </article>
+     <article className="panel"><div className="panelHead"><div><small>BACKEND</small><h2>Status da integração</h2></div><span className="softBadge">Operacional</span></div><div className="health"><i></i><div><b>API Next.js + PNCP</b><small>Retry, timeout e controle de concorrência ativos.</small></div></div></article>
     </section>}
-   </section>
+   </div>
   </main>
 
   {selected&&<div className="modalBackdrop" onMouseDown={()=>{setSelected(null);setDetail(null)}}>
    <div className="modal" onMouseDown={e=>e.stopPropagation()}>
-    <div className="modalHead"><div><span className="badge">{selected.modalidadeNome}</span><h2>Detalhes da licitação</h2></div><button onClick={()=>{setSelected(null);setDetail(null)}}>×</button></div>
+    <div className="modalHead"><div><span>{selected.modalidadeNome}</span><h2>Detalhes da licitação</h2></div><button onClick={()=>{setSelected(null);setDetail(null)}}>×</button></div>
     <div className="modalBody">
-      <h3>{selected.objetoCompra}</h3><p className="org">{selected.orgaoRazaoSocial}</p>
-      <div className="detailSummary"><div><small>Local</small><b>{selected.municipioNome||"—"} / {selected.ufSigla||"—"}</b></div><div><small>Valor estimado</small><b>{money(selected.valorTotalEstimado)}</b></div><div><small>Encerramento</small><b>{date(selected.dataEncerramentoProposta)}</b></div></div>
-      {detailLoading&&<div className="loadingBox">Consultando itens e documentos oficiais...</div>}
-      {!detailLoading&&detail&&<>
-       <div className="detailSection"><div className="panelTitle"><b>Itens da contratação</b><span>{detail.itens.length}</span></div><div className="detailList">{detail.itens.slice(0,20).map((it:any,i)=><div key={i}><b>{it.numeroItem?("#"+it.numeroItem+" "):""}{it.descricao||it.materialOuServicoNome||"Item da contratação"}</b><span>{it.quantidade?("Qtd. "+it.quantidade):""}{it.valorUnitarioEstimado?(" • "+money(Number(it.valorUnitarioEstimado))):""}</span></div>)}{!detail.itens.length&&<p className="muted">Nenhum item retornado pela fonte.</p>}</div></div>
-       <div className="detailSection"><div className="panelTitle"><b>Documentos e anexos</b><span>{detail.documentos.length}</span></div><div className="detailList">{detail.documentos.slice(0,20).map((doc:any,i)=><a key={i} href={doc.uri||doc.url||"#"} target="_blank"><b>{doc.titulo||doc.tipoDocumentoNome||"Documento"}</b><span>{doc.dataPublicacaoPncp?date(doc.dataPublicacaoPncp):"Abrir documento"} ↗</span></a>)}{!detail.documentos.length&&<p className="muted">Nenhum documento retornado pela fonte.</p>}</div></div>
-      </>}
+     <h3>{selected.objetoCompra}</h3><p>{selected.orgaoRazaoSocial}</p>
+     <div className="detailGrid"><div><small>Local</small><b>{selected.municipioNome||"—"} / {selected.ufSigla||"—"}</b></div><div><small>Valor estimado</small><b>{money(selected.valorTotalEstimado)}</b></div><div><small>Encerramento</small><b>{date(selected.dataEncerramentoProposta)}</b></div></div>
+     {detailLoading&&<div className="empty">Consultando dados oficiais...</div>}
+     {detail&&!detailLoading&&<>
+      {detail.itens.length>0&&<div className="detailSection"><h4>Itens</h4><div className="detailList">{detail.itens.slice(0,12).map((it:any,i)=><div key={i}><b>{it.descricao||it.materialOuServicoNome||"Item"}</b><span>{it.quantidade??""}</span></div>)}</div></div>}
+      {detail.documentos.length>0&&<div className="detailSection"><h4>Documentos</h4><div className="detailList">{detail.documentos.slice(0,10).map((doc:any,i)=><a key={i} href={doc.url||doc.urlArquivo} target="_blank"><b>{doc.titulo||doc.nome||"Documento"}</b><span>Abrir ↗</span></a>)}</div></div>}
+     </>}
     </div>
-    <div className="modalFoot"><a className="greenBtn" href={selected.urlPncp} target="_blank">Abrir processo no PNCP ↗</a></div>
+    <div className="modalFoot"><a href={selected.urlPncp} target="_blank">Abrir processo oficial no PNCP ↗</a></div>
    </div>
   </div>}
- </div>;
+ </div>
 }
