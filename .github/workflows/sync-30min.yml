@@ -1,0 +1,22 @@
+name: Sincronização obrigatória 30 minutos
+
+on:
+  schedule:
+    - cron: "*/30 * * * *"
+  workflow_dispatch:
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Atualizar dados do Licita Brasil
+        env:
+          SYNC_URL: "https://licita-brasil-previa-a55u4v.v2.appdeploy.ai"
+        run: |
+          set -e
+          echo "Atualizando dados..."
+          curl --fail --retry 3 --retry-delay 10 --max-time 180 "$SYNC_URL/api/refresh"
+          echo
+          echo "Validando backend..."
+          curl --fail --retry 3 --retry-delay 10 --max-time 60 "$SYNC_URL/api/health"
