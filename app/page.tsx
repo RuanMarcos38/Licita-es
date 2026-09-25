@@ -9,7 +9,9 @@ type Licitacao={
   urlPncp:string;urlOrigem:string;
 };
 type Detail={contratacao:any;itens:any[];documentos:any[];historico:any[];consultadoEm:string;parcial?:boolean};
-type Tab="dashboard"|"licitacoes"|"favoritos"|"monitoramento"|"fontes"|"configuracoes";
+type OrgaoPublico={cnpj:string;razaoSocial:string;esfera:string;poder:string;uf:string;municipio:string;oportunidades:number;valorEstimado:number;ultimaPublicacao:string;fonte:string};
+type Plataforma={id:string;nome:string;dominio:string;tipo:string;consulta:boolean;participacaoInterna:boolean;requisito:string};
+type Tab="dashboard"|"licitacoes"|"favoritos"|"monitoramento"|"orgaos"|"participacao"|"fontes"|"configuracoes";
 
 const UFS=["","AC","AL","AP","AM","BA","CE","DF","ES","GO","MA","MT","MS","MG","PA","PB","PR","PE","PI","RJ","RN","RS","RO","RR","SC","SP","SE","TO"];
 const MODS=[
@@ -51,6 +53,13 @@ export default function Home(){
  const [detail,setDetail]=useState<Detail|null>(null);
  const [detailLoading,setDetailLoading]=useState(false);
  const [mobileMenu,setMobileMenu]=useState(false);
+ const [orgaos,setOrgaos]=useState<OrgaoPublico[]>([]);
+ const [orgQuery,setOrgQuery]=useState("");
+ const [orgLoading,setOrgLoading]=useState(false);
+ const [orgError,setOrgError]=useState("");
+ const [orgUpdated,setOrgUpdated]=useState("");
+ const [plataformas,setPlataformas]=useState<Plataforma[]>([]);
+ const [participationItem,setParticipationItem]=useState<Licitacao|null>(null);
 
  useEffect(()=>{
   try{
@@ -77,6 +86,32 @@ export default function Home(){
  }
 
  useEffect(()=>{search(undefined,false);},[]);
+ useEffect(()=>{
+  fetch("/api/plataformas").then(r=>r.json()).then(j=>setPlataformas(j.items||[])).catch(()=>{});
+ },[]);
+
+ async function searchOrgaos(){
+  setOrgLoading(true);setOrgError("");
+  try{
+   const clean=orgQuery.replace(/\D/g,"");
+   const params=new URLSearchParams();
+   if(/^\d{14}$/.test(clean))params.set("cnpj",clean);
+   else if(orgQuery.trim())params.set("q",orgQuery.trim());
+   if(uf)params.set("uf",uf);
+   params.set("dias","60");
+   const r=await fetch("/api/orgaos?"+params.toString(),{cache:"no-store"});
+   const j=await r.json();
+   if(!r.ok)throw new Error(j.detail||j.error||"Falha ao consultar órgãos");
+   setOrgaos(j.items||[]);setOrgUpdated(j.atualizadoEm||new Date().toISOString());
+  }catch(err){setOrgError(err instanceof Error?err.message:"Erro ao consultar órgãos");}
+  finally{setOrgLoading(false);}
+ }
+
+ function openParticipation(x:Licitacao){
+  setParticipationItem(x);
+  setTab("participacao");
+  setMobileMenu(false);
+ }
 
  function changeTab(next:Tab){setTab(next);setMobileMenu(false)}
  function toggleFav(id:string){
@@ -123,7 +158,7 @@ export default function Home(){
  },[items]);
  const maxUf=Math.max(1,...byUf.map(([,v])=>v));
  const linePoints=byUf.length?byUf.map(([,v],i)=>`${i*(560/Math.max(1,byUf.length-1))},${170-(v/maxUf)*125}`).join(" "):"0,150 90,120 180,138 270,90 360,108 450,65 560,86";
- const title=tab==="dashboard"?"Dashboard":tab==="licitacoes"?"Buscar licitações":tab==="favoritos"?"Favoritos":tab==="monitoramento"?"Monitoramento inteligente":tab==="fontes"?"Fontes oficiais":"Configurações";
+ const title=tab==="dashboard"?"Dashboard":tab==="licitacoes"?"Buscar licitações":tab==="favoritos"?"Favoritos":tab==="monitoramento"?"Monitoramento inteligente":tab==="orgaos"?"Órgãos públicos":tab==="participacao"?"Centro de participação":tab==="fontes"?"Fontes oficiais":"Configurações";
 
  return <div className="appFrame">
   <aside className={"sidebar "+(mobileMenu?"open":"")}>
@@ -139,6 +174,8 @@ export default function Home(){
     <button className={tab==="licitacoes"?"active":""} onClick={()=>changeTab("licitacoes")}><I>▤</I>Licitações</button>
     <button className={tab==="favoritos"?"active":""} onClick={()=>changeTab("favoritos")}><I>☆</I>Favoritos <em>{fav.length}</em></button>
     <button className={tab==="monitoramento"?"active":""} onClick={()=>changeTab("monitoramento")}><I>◎</I>Monitoramento <em>{keywords.length}</em></button>
+    <button onClick={()=>{changeTab("orgaos");setTimeout(()=>{if(!orgaos.length)searchOrgaos()},0)}} className={tab==="orgaos"?"active":""}><I>▦</I>Órgãos públicos</button>
+    <button onClick={()=>changeTab("participacao")} className={tab==="participacao"?"active":""}><I>⇄</I>Participação</button>
     <button onClick={()=>changeTab("fontes")} className={tab==="fontes"?"active":""}><I>✓</I>Fontes oficiais</button>
    </nav>
 
@@ -244,7 +281,7 @@ export default function Home(){
        <h3>{x.objetoCompra}</h3><p>{x.orgaoRazaoSocial}</p>
        <div className="oppMeta"><span>⌖ {x.municipioNome||"—"} / {x.ufSigla||"—"}</span><span>▣ {x.numeroCompra||x.numeroProcesso||"Sem número"}</span></div>
        <div className="oppStats"><div><small>Valor</small><b>{money(x.valorTotalEstimado)}</b></div><div><small>Encerramento</small><b>{date(x.dataEncerramentoProposta)}</b></div></div>
-       <div className="oppActions"><button onClick={()=>openDetail(x)}>Ver detalhes</button><a href={x.urlPncp} target="_blank">PNCP ↗</a></div>
+       <div className="oppActions"><button onClick={()=>openDetail(x)}>Ver detalhes</button><button onClick={()=>openParticipation(x)}>Participar</button><a href={x.urlPncp} target="_blank">PNCP ↗</a></div>
       </article>)}
       {!loading&&!(tab==="favoritos"?favorites:items).length&&<div className="empty">Nenhuma oportunidade encontrada.</div>}
      </div>
@@ -257,6 +294,42 @@ export default function Home(){
       <div className="chips">{keywords.map(k=><span key={k}>{k}<button onClick={()=>removeKeyword(k)}>×</button></span>)}{!keywords.length&&<small>Nenhum termo cadastrado.</small>}</div>
      </article>
      <article className="panel centerCard"><span className="bigRound">◎</span><strong>{matched.length}</strong><h3>oportunidades compatíveis</h3><p>na consulta atual</p><button onClick={()=>changeTab("licitacoes")}>Analisar oportunidades</button></article>
+    </section>}
+
+    {tab==="orgaos"&&<section className="orgSection">
+     <article className="panel orgSearchPanel">
+      <div className="panelHead"><div><small>DIRETÓRIO NACIONAL</small><h2>Órgãos públicos e unidades compradoras</h2></div><span className="softBadge">Atualização obrigatória ≤ 30 min</span></div>
+      <p className="muted">Pesquise por nome, cidade, UF ou CNPJ. CNPJ com 14 dígitos consulta diretamente o cadastro oficial do PNCP.</p>
+      <div className="bigSearch"><span>⌕</span><input value={orgQuery} onChange={e=>setOrgQuery(e.target.value)} placeholder="Nome do órgão ou CNPJ"/><button type="button" onClick={searchOrgaos} disabled={orgLoading}>{orgLoading?"Consultando...":"Localizar"}</button></div>
+      <div className="filters orgFilters"><label>UF<select value={uf} onChange={e=>setUf(e.target.value)}>{UFS.map(x=><option key={x} value={x}>{x||"Todo Brasil"}</option>)}</select></label><div className="syncInfo"><b>Fonte: PNCP</b><span>{orgUpdated?"Última consulta: "+new Intl.DateTimeFormat("pt-BR",{dateStyle:"short",timeStyle:"short"}).format(new Date(orgUpdated)):"Sincronização automática a cada 30 minutos"}</span></div></div>
+      {orgError&&<div className="errorBox">{orgError}</div>}
+     </article>
+     <div className="orgGrid">
+      {orgaos.map(o=><article className="panel orgCard" key={o.cnpj||o.razaoSocial}>
+       <div className="orgCardTop"><span className="orgAvatar">🏛</span><span className="softBadge">{o.fonte}</span></div>
+       <h3>{o.razaoSocial}</h3><p>{o.cnpj||"CNPJ não informado"}</p>
+       <div className="orgMeta"><span>{o.municipio||"—"} {o.uf?"/ "+o.uf:""}</span><span>{o.esfera}</span><span>{o.poder}</span></div>
+       <div className="orgStats"><div><small>Oportunidades</small><b>{o.oportunidades}</b></div><div><small>Valor estimado</small><b>{shortMoney(o.valorEstimado)}</b></div></div>
+       <button className="smallBtn" onClick={()=>{setQuery(o.razaoSocial);setTab("licitacoes")}}>Ver licitações</button>
+      </article>)}
+      {!orgLoading&&!orgaos.length&&<div className="empty">Use a pesquisa para localizar órgãos públicos de todo o Brasil.</div>}
+     </div>
+    </section>}
+
+    {tab==="participacao"&&<section className="participationGrid">
+     <article className="panel participationMain">
+      <div className="panelHead"><div><small>CENTRO DE PARTICIPAÇÃO</small><h2>{participationItem?"Processo selecionado":"Integrações de fornecedor"}</h2></div><span className="softBadge">Ambiente seguro</span></div>
+      {participationItem?<div className="participationTender">
+       <h3>{participationItem.objetoCompra}</h3><p>{participationItem.orgaoRazaoSocial}</p>
+       <div className="detailGrid"><div><small>Modalidade</small><b>{participationItem.modalidadeNome}</b></div><div><small>Valor estimado</small><b>{money(participationItem.valorTotalEstimado)}</b></div><div><small>Encerramento</small><b>{date(participationItem.dataEncerramentoProposta)}</b></div></div>
+       <div className="integrationNotice"><b>Envio direto de proposta/lance</b><p>Será habilitado somente quando houver API oficial/autorizada e credenciais válidas do fornecedor para a plataforma de origem. A ferramenta não contorna autenticação, certificado, SICAF ou regras da sessão pública.</p></div>
+       <div className="oppActions"><button onClick={()=>openDetail(participationItem)}>Revisar edital e documentos</button>{participationItem.urlOrigem&&<a href={participationItem.urlOrigem} target="_blank">Sistema de origem ↗</a>}</div>
+      </div>:<p className="muted">Selecione uma licitação e clique em Participar. O sistema identifica a plataforma de origem e verifica se existe integração autorizada disponível.</p>}
+     </article>
+     <article className="panel platformPanel">
+      <div className="panelHead"><div><small>PLATAFORMAS</small><h2>Status de integração</h2></div></div>
+      <div className="platformList">{plataformas.map(p=><div className="platformRow" key={p.id}><div><b>{p.nome}</b><small>{p.requisito}</small></div><span className={p.participacaoInterna?"statusReady":"statusAuth"}>{p.participacaoInterna?"Pronta":"Credencial/API necessária"}</span></div>)}</div>
+     </article>
     </section>}
 
     {tab==="fontes"&&<section className="sourceGrid">
